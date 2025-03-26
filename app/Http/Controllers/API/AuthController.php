@@ -57,8 +57,23 @@ class AuthController extends Controller
      // Logout API
     public function logout(Request $request)
     {
-        $request->user()->tokens()->delete();
-        return response()->json(['message' => 'Logged out successfully']);
+        try {
+            $request->user()->tokens()->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Logout successful'
+             ], 200);
+
+        } catch (\Exception $e) {
+
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage()
+            ], 500);
+
+        }
+
     }
 
     public function redirectToGoogle()
@@ -87,9 +102,13 @@ class AuthController extends Controller
                 'token_type' => 'Bearer'
             ]);
         } catch (\Exception $e) {
-            return response()->json(['error' => 'Google login failed'], 401);
+            return response()->json([
+                'success' => false,
+                'error' => 'Google login failed',
+                'message' => $e->getMessage()
+            ], 401);
         }
-    }
+    } 
 
     public function register(Request $request)
     {
@@ -100,28 +119,46 @@ class AuthController extends Controller
             'password' => 'required|string|min:6',
         ]);
 
-        // Create the user
-        $user = User::create([
-            'name' => $request->name,
-            'email' => $request->email,
-            'password' => Hash::make($request->password),
-        ]);
+        try {
+            //check if the user exist
+            if (User::where('email', $request->email)->exists()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Email has already been used',
+                ], 400);
+            }
 
-        // Create short-lived access token for checking user auth
-        $accessToken = $user->createToken('access_token', ['*'], now()->addMinutes(15))->plainTextToken;
+            // Create the user
+            $user = User::create([
+                'name' => $request->name,
+                'email' => $request->email,
+                'password' => Hash::make($request->password),
+            ]);
 
-        // Create long-lived refresh token for when access token expired to refresh access token
-        $refreshToken = $user->createToken('refresh_token', ['*'], now()->addDays(7))->plainTextToken;
+            // Create short-lived access token for checking user auth
+            $accessToken = $user->createToken('access_token', ['*'], now()->addMinutes(15))->plainTextToken;
 
- 
-         return response()->json([
-            'success' => true,
-            'message' => 'Register successful',
-            'access_token' => $accessToken,
-            'refresh_token' => $refreshToken,
-            'token_type' => 'Bearer',
-            'expires_at' => now()->addMinutes(15)->timestamp
-         ], 200);
+            // Create long-lived refresh token for when access token expired to refresh access token
+            $refreshToken = $user->createToken('refresh_token', ['*'], now()->addDays(7))->plainTextToken;
+
+    
+            return response()->json([
+                'success' => true,
+                'message' => 'Register successful',
+                'access_token' => $accessToken,
+                'refresh_token' => $refreshToken,
+                'token_type' => 'Bearer',
+                'expires_at' => now()->addMinutes(15)->timestamp
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => 'User registration failed',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+       
     }
 
     public function refreshToken(Request $request)
